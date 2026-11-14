@@ -73,10 +73,12 @@ connect_ai
 api /api/ollama/remote-status | tee /dev/stderr | jq -e '.configured and .connected' >/dev/null || fail "remote Ollama not connected"
 pass "NOMAD connected to host Ollama"
 installed="$(api /api/ollama/installed-models)"
-for m in "$MODEL_A" "$MODEL_B" "$EMBEDDING_MODEL"; do
+for m in "$MODEL_A" "$MODEL_B"; do
   echo "$installed" | grep -q "\"$m\"" || fail "NOMAD does not list model $m: $installed"
 done
-pass "NOMAD lists both chat models and the embedding model"
+# NOMAD hides embedding models from its chat list by design; check Ollama.
+ollama list | awk 'NR>1{print $1}' | grep -qxF "$EMBEDDING_MODEL" || fail "embedding model missing"
+pass "NOMAD lists both chat models; embedding model present in Ollama"
 
 # ------------------------------------------------------------------------
 step "3. Chat through NOMAD with each model (model switching)"
