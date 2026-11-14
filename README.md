@@ -115,6 +115,18 @@ From the terminal: `./nomac update --check`, `./nomac update`, `./nomac update 1
 | `~/.ollama/models` | AI models (or `OLLAMA_MODELS_DIR`) |
 | `~/Library/LaunchAgents/com.nomac.*.plist` | Ollama, updater, disk-info jobs |
 
+## Testing
+
+GitHub Actions ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs on every push and weekly to catch upstream releases that break the port:
+
+| Job | Runner | Covers |
+|---|---|---|
+| `lint` | Ubuntu | shellcheck, compose file validity |
+| `macos-host` | Apple Silicon macOS, stock bash 3.2 | config and secrets handling, Homebrew Ollama as a launchd job, model download and reply, plist validity, the updater job reacting to NOMAD's request file (and rejecting a malicious one), disk report from real macOS `df` |
+| `e2e-arm64` | arm64 Linux with Docker | builds NOMAD's previous release for arm64 and starts it; connects native Ollama; lists and chats with two models through NOMAD; checks the disk report; downloads a UK map extract; updates to the latest release via NOMAD's own Update API; rolls back |
+
+GitHub's Mac runners can't run Docker, so OrbStack and the containers on an actual Mac are only covered by the arm64 Linux job, which runs the same images. Run `./nomac doctor` after installing on your Mac.
+
 ## Known limitations
 
 - **Unofficial.** A new upstream release can break something Mac-specific. Use `./nomac rollback` and open an issue here.

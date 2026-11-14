@@ -42,7 +42,7 @@ ask() {
 }
 
 load_config() {
-  local conf="$NOMAC_REPO/nomac.conf"
+  local conf="${NOMAC_CONF:-$NOMAC_REPO/nomac.conf}"
   [ -f "$conf" ] || conf="$NOMAC_REPO/nomac.conf.example"
   # shellcheck disable=SC1090
   . "$conf"

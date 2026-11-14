@@ -32,8 +32,8 @@ build_image() {
     return 0
   fi
   upstream_checkout "$v"
-  info "Building $IMAGE_REPO:$v for Apple Silicon (first build takes 5–15 minutes)"
-  docker build --platform linux/arm64 \
+  info "Building $IMAGE_REPO:$v for ${NOMAC_PLATFORM:-linux/arm64} (first build takes 5–15 minutes)"
+  docker build --platform "${NOMAC_PLATFORM:-linux/arm64}" \
     --build-arg VERSION="$v" \
     --build-arg BUILD_DATE="$(now_iso)" \
     --build-arg VCS_REF="$(git -C "$NOMAC_UPSTREAM" rev-parse --short HEAD)" \

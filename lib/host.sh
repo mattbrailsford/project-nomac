@@ -8,6 +8,14 @@ xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>
 
 agent_path() { echo "$LAUNCH_AGENTS/$AGENT_PREFIX.$1.plist"; }
 
+# Environment for nomac's own jobs, so they use the same data dir and config
+# as the shell that installed them.
+nomac_env_xml() {
+  printf '<key>EnvironmentVariables</key><dict><key>NOMAC_HOME</key><string>%s</string>' "$(xml_escape "$NOMAC_HOME")"
+  [ -n "${NOMAC_CONF:-}" ] && printf '<key>NOMAC_CONF</key><string>%s</string>' "$(xml_escape "$NOMAC_CONF")"
+  printf '</dict>'
+}
+
 load_agent() {
   local label="$AGENT_PREFIX.$1" plist
   plist="$(agent_path "$1")"
@@ -61,6 +69,7 @@ write_updater_agent() {
   <key>ProgramArguments</key><array>
     <string>/bin/bash</string><string>$(xml_escape "$NOMAC_REPO/nomac")</string><string>_handle-update-request</string>
   </array>
+  $(nomac_env_xml)
   <key>WatchPaths</key><array><string>$(xml_escape "$NOMAC_HOME/update-shared")</string></array>
   <key>StartInterval</key><integer>300</integer>
   <key>StandardOutPath</key><string>$(xml_escape "$NOMAC_LOGS/updater.log")</string>
@@ -79,6 +88,7 @@ write_diskinfo_agent() {
   <key>ProgramArguments</key><array>
     <string>/bin/bash</string><string>$(xml_escape "$NOMAC_REPO/nomac")</string><string>_disk-info</string>
   </array>
+  $(nomac_env_xml)
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>120</integer>
   <key>StandardOutPath</key><string>$(xml_escape "$NOMAC_LOGS/diskinfo.log")</string>
