@@ -170,11 +170,13 @@ request_maps() {
   fi
 }
 
-keep_awake_prompt() {
-  [ -f "$NOMAC_STATE/asked-sleep" ] && return 0
-  touch "$NOMAC_STATE/asked-sleep"
-  if ask "Stop this Mac from sleeping (so NOMAD stays reachable and night-time updates run)? Needs your password." y; then
-    sudo pmset -a sleep 0 disksleep 0 && ok "Sleep disabled (display can still sleep)"
+power_prompt() {
+  [ -f "$NOMAC_STATE/asked-power" ] && return 0
+  touch "$NOMAC_STATE/asked-power"
+  if ask "Set this Mac to never sleep and to restart by itself after a power cut? Needs your password." y; then
+    cmd_power || true
+  else
+    echo "   You can do this later with: ./nomac power"
   fi
 }
 
@@ -202,18 +204,21 @@ cmd_install() {
   write_diskinfo_agent; load_agent diskinfo
   connect_ai
   request_maps
-  keep_awake_prompt
+  ( cmd_content ) || warn "Library download not started — see above, then run ./nomac content"
+  power_prompt
 
   echo
   ok "${C_BLD}Project NOMAD is ready: $NOMAD_URL${C_OFF}"
   cat <<EOF
 
   Next steps in NOMAD:
-    • Easy Setup: choose Wikipedia edition, Kiwix collections and Kolibri courses
+    • Library downloads (PROFILE/LIBRARY in nomac.conf) are running — watch them in NOMAD
+    • Easy Setup: add Kolibri courses or anything else you want
     • Settings → Updates: turn on automatic updates (core, apps, content) and pick a window
     • The AI Assistant is already connected; add or switch models in its settings
 
   ./nomac status     what's running and how much space is used
+  ./nomac drill      once downloads finish: check everything works offline
   ./nomac help       all commands
 EOF
 }

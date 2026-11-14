@@ -49,6 +49,26 @@ MODELS="llama3.1:8b"
 # Upgrade Ollama with Homebrew when NOMAD applies a core update.
 AUTO_UPGRADE_OLLAMA=true
 
+# -------------------------------------------------------------- library -----
+# PROFILE="prepper" downloads an essentials library (~80 GB) and apps, using
+# NOMAD's own curated collections. Empty = choose everything in NOMAD's UI.
+# Sizes are checked against free space first: ./nomac content --dry-run
+PROFILE="prepper"
+
+# Override any part of the profile by uncommenting:
+#
+# Wikipedia edition: none | top-mini (0.3 GB) | top-nopic (2 GB) | all-mini (13 GB)
+#                    all-nopic (53 GB) | all-maxi (124 GB, use the SSD)
+#WIKIPEDIA="all-nopic"
+#
+# NOMAD collections as category:tier. Tiers are essential < standard <
+# comprehensive (each includes the one below). Categories: medicine, survival,
+# diy, agriculture, education, computing.
+#LIBRARY="medicine:comprehensive survival:standard diy:comprehensive agriculture:standard education:essential"
+#
+# Supply Depot apps to install (names as NOMAD uses them).
+#APPS="nomad_kiwix_server nomad_flatnotes nomad_meshtastic_web nomad_calibreweb nomad_vaultwarden nomad_homebox nomad_filebrowser"
+
 # ----------------------------------------------------------------- maps -----
 # Country map extracts to download at install, as ISO codes (GB = United
 # Kingdom, IE = Ireland, FR = France ...). Space separated; empty = none.

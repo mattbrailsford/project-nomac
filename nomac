@@ -14,6 +14,10 @@ NOMAC_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 . "$NOMAC_REPO/lib/host.sh"
 # shellcheck source=lib/install.sh
 . "$NOMAC_REPO/lib/install.sh"
+# shellcheck source=lib/content.sh
+. "$NOMAC_REPO/lib/content.sh"
+# shellcheck source=lib/prepper.sh
+. "$NOMAC_REPO/lib/prepper.sh"
 
 cmd_status() {
   load_config
@@ -127,6 +131,14 @@ nomac — Project NOMAD for Apple Silicon Macs
   models [list|pull NAME|rm NAME]
   maps CC [CC ...] [--zoom N]
                      Download a country map extract (e.g. nomac maps GB)
+  content [--dry-run] [--force]
+                     Download the library and apps set in nomac.conf
+                     (PROFILE, WIKIPEDIA, LIBRARY, APPS), after a space check
+  drill              Readiness check: library opens, AI answers, maps, apps,
+                     power-cut recovery. Run it with the internet unplugged.
+  power              Never sleep, restart after power cuts, start Docker at login
+  export-phone [DIR] [--max-gb N]
+                     Copy the essential references for the Kiwix phone app
   logs [admin|kiwix|ollama|updater|update|...]
   cleanup            Remove old images and build cache
   uninstall
@@ -148,6 +160,10 @@ main() {
     rollback)  load_config; cmd_rollback ;;
     models)    cmd_models "$@" ;;
     maps)      cmd_maps "$@" ;;
+    content)   cmd_content "$@" ;;
+    drill)     cmd_drill ;;
+    power)     cmd_power ;;
+    export-phone) cmd_export_phone "$@" ;;
     logs)      cmd_logs "$@" ;;
     cleanup)   cmd_cleanup ;;
     uninstall) cmd_uninstall ;;

@@ -115,7 +115,8 @@ latest_upstream_version() {
     | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1 || true
 }
 
-free_gb() { df -g "$1" 2>/dev/null | awk 'NR==2{print $4}'; }
+# Free GB on the filesystem holding $1 (portable: BSD and GNU df).
+free_gb() { df -Pk "$1" 2>/dev/null | awk 'NR==2{print int($4/1048576)}'; }
 
 check_free_space() {
   local path="$1" free

@@ -5,7 +5,8 @@
 # tests/macos-host.sh covers.
 #
 #   build NOMAD (previous release) -> start -> connect AI -> two models, chat
-#   with each -> disk report -> UK map extract -> update via NOMAD's own
+#   with each -> disk report -> UK map extract -> library + apps preset ->
+#   drill -> phone export -> update via NOMAD's own
 #   Update button to the latest release -> rollback
 set -eo pipefail
 
@@ -18,7 +19,7 @@ NOMAC="$REPO/nomac"
 MODEL_A="qwen3:0.6b"
 MODEL_B="gemma3:270m"
 
-. "$REPO/lib/common.sh"; . "$REPO/lib/build.sh"; . "$REPO/lib/update.sh"; . "$REPO/lib/host.sh"; . "$REPO/lib/install.sh"
+. "$REPO/lib/common.sh"; . "$REPO/lib/build.sh"; . "$REPO/lib/update.sh"; . "$REPO/lib/host.sh"; . "$REPO/lib/install.sh"; . "$REPO/lib/content.sh"; . "$REPO/lib/prepper.sh"
 
 LATEST="$(latest_upstream_version)"
 PREV="$(git ls-remote --tags --refs "$UPSTREAM_URL" 'v*' | sed 's|.*refs/tags/v||' \
@@ -35,6 +36,10 @@ MODELS="$MODEL_A $MODEL_B"
 MAP_COUNTRIES="GB"
 MAP_MAX_ZOOM=6
 MIN_FREE_GB=5
+# Small stand-in for PROFILE="prepper" so CI stays quick.
+WIKIPEDIA="top-mini"
+LIBRARY="medicine:essential agriculture:essential"
+APPS="nomad_kiwix_server nomad_vaultwarden"
 EOF
 load_config
 
@@ -110,6 +115,32 @@ until find "$STORAGE_PATH" -name '*_z6.pmtiles' -size +10k 2>/dev/null | grep -q
 done
 find "$STORAGE_PATH" -name '*_z6.pmtiles' -exec ls -lh {} \;
 pass "UK map extract downloaded"
+
+# ------------------------------------------------------------------------
+step "5b. Library and apps preset (nomac content)"
+"$NOMAC" content
+i=0
+until ! "$NOMAC" content --dry-run | grep -q ' + '; do
+  i=$((i + 15)); [ "$i" -ge 1800 ] && { "$NOMAC" content --dry-run; fail "library downloads did not finish in 30 minutes"; }
+  sleep 15
+done
+"$NOMAC" content --dry-run
+for app in nomad_kiwix_server nomad_vaultwarden; do
+  docker ps --format '{{.Names}}' | grep -qx "$app" || fail "$app not running"
+done
+pass "Wikipedia, medicine and agriculture sets downloaded; Kiwix and Vaultwarden running"
+
+step "5c. Readiness drill"
+"$NOMAC" drill || fail "drill reported failures"
+pass "drill passed (library opens in Kiwix, AI answers, maps and apps present)"
+
+step "5d. Phone export"
+"$NOMAC" export-phone "$W/phone" --max-gb 1
+[ -f "$W/phone/README.txt" ] || fail "export README missing"
+n="$(find "$W/phone" -name '*.zim' | wc -l | tr -d ' ')"
+[ "$n" -ge 5 ] || fail "expected the 4 medical references plus Wikipedia, got $n files"
+find "$W/phone" -name 'wikipedia_en_top_*.zim' | grep -q . || fail "Wikipedia not exported"
+pass "exported $n references for the Kiwix phone app"
 
 # ------------------------------------------------------------------------
 step "6. Update $PREV -> $LATEST via NOMAD's own Update API"

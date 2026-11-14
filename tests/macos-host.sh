@@ -15,7 +15,7 @@ NOMAC_REPO="$REPO"
 NOMAC="$REPO/nomac"
 MODEL="qwen3:0.6b"
 
-. "$REPO/lib/common.sh"; . "$REPO/lib/build.sh"; . "$REPO/lib/update.sh"; . "$REPO/lib/host.sh"; . "$REPO/lib/install.sh"
+. "$REPO/lib/common.sh"; . "$REPO/lib/build.sh"; . "$REPO/lib/update.sh"; . "$REPO/lib/host.sh"; . "$REPO/lib/install.sh"; . "$REPO/lib/content.sh"; . "$REPO/lib/prepper.sh"
 
 PASS=0
 pass() { ok "PASS: $*"; PASS=$((PASS + 1)); }
@@ -45,6 +45,7 @@ OLLAMA_BIND="0.0.0.0:11434"
 MODELS="$MODEL"
 MIN_FREE_GB=5
 EOF
+sed 's/^MODELS=.*/PROFILE="prepper"/' "$NOMAC_CONF" > "$W/prepper.conf"
 load_config
 storage_setup
 write_env
@@ -108,7 +109,25 @@ jq -e '[.fsSize[].mount] | index("/System/Volumes/Data") != null' "$STORAGE_PATH
 jq -e '.diskLayout.blockdevices | all(.type == "disk")' "$STORAGE_PATH/nomad-disk-info.json" >/dev/null || fail "blockdevices malformed"
 pass "disk report written by launchd job in NOMAD's format"
 
-step "6. CLI without Docker"
+step "6. Library planner, phone export and power checks (BSD tools)"
+upstream_checkout "$(resolve_version latest)" >/dev/null
+out="$(NOMAC_CONF="$W/prepper.conf" "$NOMAC" content --dry-run 2>&1 || true)"
+echo "$out" | tail -n 4
+echo "$out" | grep -q "ifixit_en_all" && echo "$out" | grep -q "Total" || fail "prepper plan not computed"
+pass "prepper library plan computed with sizes"
+mkdir -p "$STORAGE_PATH/zim"
+for f in zimgit-medicine_en_2024-08 nhs.uk_en_medicines_2025-12 wikipedia_en_top_mini_2026-06 wikipedia_en_all_maxi_2026-01; do
+  head -c 1048576 /dev/urandom > "$STORAGE_PATH/zim/$f.zim"
+done
+"$NOMAC" export-phone "$W/phone" --max-gb 1
+[ "$(find "$W/phone" -name '*.zim' | wc -l | tr -d ' ')" = "3" ] || fail "export picked wrong files"
+[ -f "$W/phone/wikipedia_en_all_maxi_2026-01.zim" ] || fail "export should pick the largest Wikipedia that fits"
+pass "phone export (APFS clone copy, size budget, Wikipedia choice)"
+pmset -g | grep -E '^ *(sleep|autorestart) ' | sed 's/^/  /' || true
+autologin_advice || true
+pass "power and login checks run"
+
+step "7. CLI without Docker"
 "$NOMAC" help >/dev/null
 "$NOMAC" status || fail "status crashed"
 pass "status works when Docker is absent"
