@@ -153,10 +153,12 @@ WATCHER=$!
 trap 'kill $WATCHER 2>/dev/null || true' EXIT
 api "/api/system/latest-version?force=true" | tee /dev/stderr | jq -e '.success != false' >/dev/null || fail "version check failed"
 api /api/system/update '{}' | tee /dev/stderr | jq -e '.success' >/dev/null || fail "NOMAD refused the update request"
+# "complete" only lasts ~5 s before the status returns to "idle" (as with
+# upstream's sidecar), so judge by the update log rather than polling for it.
 i=0; stage=""
 while :; do
   stage="$(jq -r .stage "$STATUS_FILE" 2>/dev/null || true)"
-  [ "$stage" = "complete" ] && break
+  grep -q "Update complete" "$UPDATE_LOG" 2>/dev/null && [ "$stage" != "starting" ] && break
   [ "$stage" = "error" ] && { cat "$UPDATE_LOG"; fail "update reported error"; }
   i=$((i + 10)); [ "$i" -ge 2700 ] && { cat "$UPDATE_LOG"; fail "update did not complete in 45 minutes (stage: $stage)"; }
   sleep 10
