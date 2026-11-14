@@ -120,7 +120,10 @@ pass "UK map extract downloaded"
 step "5b. Library and apps preset (nomac content)"
 "$NOMAC" content
 i=0
-until ! "$NOMAC" content --dry-run | grep -q ' + '; do
+# Count with grep -c (reads everything): grep -q would exit early, break the
+# pipe and, under pipefail, look like "nothing missing".
+missing() { "$NOMAC" content --dry-run 2>/dev/null | grep -c ' + ' || true; }
+until [ "$(missing)" = "0" ]; do
   i=$((i + 15)); [ "$i" -ge 1800 ] && { "$NOMAC" content --dry-run; fail "library downloads did not finish in 30 minutes"; }
   sleep 15
 done

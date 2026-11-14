@@ -30,6 +30,8 @@ manifest_dir() {
 
 zim_dir() { echo "$STORAGE_PATH/zim"; }
 
+gb() { awk -v mb="$1" 'BEGIN{printf (mb < 10240 ? "%.1f" : "%d"), mb / 1024}'; }
+
 # Print the planned library as TSV: id <tab> size_mb <tab> filename <tab> group
 plan_library() {
   local d entry cat tier
@@ -83,7 +85,7 @@ cmd_content() {
 $plan
 EOF
   free="$(free_gb "$STORAGE_PATH")"; avail=$(( (free - MIN_FREE_GB) * 1024 ))
-  echo "   Total $((total_mb / 1024)) GB · to download $((missing_mb / 1024)) GB · free $free GB (keeping $MIN_FREE_GB GB spare)"
+  echo "   Total $(gb "$total_mb") GB · to download $(gb "$missing_mb") GB · free $free GB (keeping $MIN_FREE_GB GB spare)"
   [ -n "$APPS" ] && echo "   Apps: $APPS"
 
   if [ "$missing_mb" -gt "$avail" ] && [ "$force" != 1 ]; then
