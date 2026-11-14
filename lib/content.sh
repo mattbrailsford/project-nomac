@@ -11,7 +11,7 @@ PREPPER_LIBRARY="medicine:comprehensive survival:standard diy:comprehensive agri
 PREPPER_APPS="nomad_kiwix_server nomad_flatnotes nomad_meshtastic_web nomad_calibreweb nomad_vaultwarden nomad_homebox nomad_filebrowser"
 
 # Most important first: used by `drill` and `export-phone`.
-ESSENTIAL_IDS="zimgit-medicine_en nhs.uk_en_medicines wwwnc.cdc.gov_en_all fas-military-medicine_en zimgit-water_en zimgit-food-preparation_en zimgit-knots_en zimgit-post-disaster_en medlineplus.gov_en_all wikipedia_en_medicine_maxi www.ready.gov_en outdoors.stackexchange.com_en_all ifixit_en_all"
+ESSENTIAL_IDS="zimgit-medicine_en nhs.uk_en_medicines wwwnc.cdc.gov_en_all irp.fas.org_en_military-medicine fas-military-medicine_en zimgit-water_en zimgit-food-preparation_en zimgit-knots_en zimgit-post-disaster_en medlineplus.gov_en_all wikipedia_en_medicine_maxi www.ready.gov_en outdoors.stackexchange.com_en_all ifixit_en_all"
 
 apply_profile_defaults() {
   if [ "${PROFILE:-}" = "prepper" ]; then
@@ -22,10 +22,32 @@ apply_profile_defaults() {
   WIKIPEDIA="${WIKIPEDIA:-}"; LIBRARY="${LIBRARY:-}"; APPS="${APPS:-}"
 }
 
+# NOMAD reads its curated lists from upstream's main branch at runtime (see
+# CollectionManifestService), which can differ from the bundled copy (files
+# get renamed). Use the same lists: refreshed daily while online, cached for
+# offline use, bundled copy as the last resort.
+MANIFEST_BASE="https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/collections"
+
 manifest_dir() {
-  local d="$NOMAC_UPSTREAM/collections"
-  [ -f "$d/kiwix-categories.json" ] || die "NOMAD source not found at $NOMAC_UPSTREAM — run ./nomac install first."
-  echo "$d"
+  local cache="$NOMAC_STATE/manifests" bundled="$NOMAC_UPSTREAM/collections" f tmp
+  mkdir -p "$cache"
+  for f in kiwix-categories.json wikipedia.json; do
+    if [ ! -s "$cache/$f" ] || [ -n "$(find "$cache/$f" -mmin +1440 2>/dev/null)" ]; then
+      tmp="$cache/$f.tmp"
+      if curl -fsSL -m 20 "$MANIFEST_BASE/$f" -o "$tmp" 2>/dev/null && jq -e . "$tmp" >/dev/null 2>&1; then
+        mv "$tmp" "$cache/$f"
+      else
+        rm -f "$tmp"
+      fi
+    fi
+  done
+  if [ -s "$cache/kiwix-categories.json" ] && [ -s "$cache/wikipedia.json" ]; then
+    echo "$cache"
+  elif [ -f "$bundled/kiwix-categories.json" ]; then
+    echo "$bundled"
+  else
+    die "No collection lists available (offline and NOMAD not installed yet)."
+  fi
 }
 
 zim_dir() { echo "$STORAGE_PATH/zim"; }
@@ -35,7 +57,7 @@ gb() { awk -v mb="$1" 'BEGIN{printf (mb < 10240 ? "%.1f" : "%d"), mb / 1024}'; }
 # Print the planned library as TSV: id <tab> size_mb <tab> filename <tab> group
 plan_library() {
   local d entry cat tier
-  d="$(manifest_dir)"
+  d="$(manifest_dir)" || exit 1
   if [ -n "$WIKIPEDIA" ] && [ "$WIKIPEDIA" != "none" ]; then
     jq -r --arg o "$WIKIPEDIA" '.options[] | select(.id == $o)
       | ["wikipedia-" + .id, .size_mb, (.url | split("/") | last), "wikipedia:" + .id] | @tsv' "$d/wikipedia.json" \
