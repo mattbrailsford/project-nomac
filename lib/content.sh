@@ -59,6 +59,9 @@ have_resource() {
   # Non-ZIM resources (e.g. the FDA drug database) are fetched by NOMAD itself.
   case "$file" in *.zim) ;; *) [ -f "$NOMAC_STATE/requested-tier-$group" ]; return ;; esac
   [ -f "$(zim_dir)/$file" ] && return 0
+  # Any dated edition counts (NOMAD's content updates replace files with newer
+  # ones): wikipedia_en_top_mini_2026-06.zim -> wikipedia_en_top_mini_*.zim
+  ls "$(zim_dir)/${file%_*}_"*.zim >/dev/null 2>&1 && return 0
   case "$id" in wikipedia-*) return 1 ;; esac
   ls "$(zim_dir)/${id}_"*.zim >/dev/null 2>&1
 }
