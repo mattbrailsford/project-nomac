@@ -197,4 +197,6 @@ GitHub's Mac runners can't run Docker, so OrbStack and the containers on an actu
 
 ## License
 
-Project NOMAD is © Crosstalk Solutions, LLC, licensed under Apache-2.0. This repository contains no upstream code; NOMAD is downloaded and built from upstream at install time.
+This repository is licensed under the [Apache License 2.0](LICENSE).
+
+Project NOMAD is © Crosstalk Solutions, LLC, also under Apache-2.0. This repository contains no upstream code; NOMAD is downloaded and built from upstream at install time. Content that NOMAD downloads (Wikipedia, Kiwix collections, maps, Creator Packs) has its own licenses.
