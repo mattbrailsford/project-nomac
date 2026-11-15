@@ -1,0 +1,101 @@
+# Project NOMAD on macOS (Apple Silicon) — core services.
+#
+# Differences from upstream install/management_compose.yaml:
+#   * admin image is built locally for arm64 (nomac/project-nomad:<version>)
+#   * no `updater` sidecar  — updates are handled on the Mac by the nomac
+#     launchd job watching ${NOMAC_HOME}/update-shared (same file protocol)
+#   * no `disk-collector`   — the Mac writes nomad-disk-info.json itself
+#   * Ollama is NOT a container — it runs natively on the Mac for Metal GPU
+#   * all paths come from ${NOMAC_HOME}/.env, written by `nomac install`
+#
+# Do not edit this copy in ~/.nomac; edit compose/compose.yaml in the repo and
+# run `nomac start` (it re-copies it).
+name: project-nomad
+services:
+  admin:
+    image: nomac/project-nomad:${NOMAD_VERSION}
+    pull_policy: never
+    container_name: nomad_admin
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${NOMAD_PORT}:8080"
+    volumes:
+      # Left side MUST equal NOMAD_STORAGE_PATH below: the admin passes this
+      # host path on to every app it creates (Kiwix, Qdrant, ...).
+      - ${STORAGE_PATH}:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Bind mount (not a named volume) so the Mac-side updater can see requests.
+      - ${NOMAC_HOME}/update-shared:/app/update-shared
+    environment:
+      - NODE_ENV=production
+      - NOMAD_STORAGE_PATH=${STORAGE_PATH}
+      - PORT=8080
+      - LOG_LEVEL=info
+      - APP_KEY=${APP_KEY}
+      - HOST=0.0.0.0
+      - URL=${NOMAD_URL}
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=nomad
+      - DB_USER=nomad_user
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=nomad
+      - DB_SSL=false
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DISABLE_COMPRESSION=false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dozzle:
+    image: amir20/dozzle:v10.0
+    container_name: nomad_dozzle
+    restart: unless-stopped
+    profiles: ["dozzle"]
+    ports:
+      - "${DOZZLE_PORT}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOZZLE_ENABLE_ACTIONS=false
+      - DOZZLE_ENABLE_SHELL=false
+
+  mysql:
+    image: mysql:8.0
+    container_name: nomad_mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=nomad
+      - MYSQL_USER=nomad_user
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      # Kept on the internal drive so the database survives an unplugged SSD.
+      - ${NOMAC_HOME}/data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nomad_redis
+    restart: unless-stopped
+    volumes:
+      - ${NOMAC_HOME}/data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -1,0 +1,177 @@
+#!/bin/bash
+# nomac — run Project NOMAD on an Apple Silicon Mac.
+# https://github.com/Crosstalk-Solutions/project-nomad (upstream, Apache-2.0)
+set -eo pipefail
+
+NOMAC_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+. "$NOMAC_REPO/lib/common.sh"
+# shellcheck source=lib/build.sh
+. "$NOMAC_REPO/lib/build.sh"
+# shellcheck source=lib/update.sh
+. "$NOMAC_REPO/lib/update.sh"
+# shellcheck source=lib/host.sh
+. "$NOMAC_REPO/lib/host.sh"
+# shellcheck source=lib/install.sh
+. "$NOMAC_REPO/lib/install.sh"
+# shellcheck source=lib/content.sh
+. "$NOMAC_REPO/lib/content.sh"
+# shellcheck source=lib/prepper.sh
+. "$NOMAC_REPO/lib/prepper.sh"
+
+cmd_status() {
+  load_config
+  echo "${C_BLD}NOMAD${C_OFF}   version $(current_version || echo '-')  ·  $NOMAD_URL  ·  $(nomad_ready && echo "${C_GRN}healthy${C_OFF}" || echo "${C_RED}not responding${C_OFF}")"
+  if ollama_ready; then
+    echo "${C_BLD}Ollama${C_OFF}  $(ollama --version 2>/dev/null | awk '{print $NF}') running on $OLLAMA_BIND"
+    ollama ps 2>/dev/null | awk 'NR>1{print "        loaded: " $1 " (" $3 $4 ")"}'
+  else
+    echo "${C_BLD}Ollama${C_OFF}  ${C_RED}not running${C_OFF}"
+  fi
+  echo
+  echo "${C_BLD}Containers${C_OFF}"
+  docker ps -a --filter name=nomad_ --format '  {{.Names}}\t{{.Status}}' 2>/dev/null | column -t -s $'\t' || echo "  Docker not running"
+  echo
+  echo "${C_BLD}Storage${C_OFF}  $STORAGE_PATH  ($(free_gb "$STORAGE_PATH" 2>/dev/null || echo '?') GB free on that drive)"
+  if [ -d "$STORAGE_PATH" ]; then
+    du -sh "$STORAGE_PATH"/* 2>/dev/null | sort -rh | head -12 | sed 's/^/  /'
+  fi
+  local models_dir="${OLLAMA_MODELS_DIR:-$HOME/.ollama/models}"
+  [ -d "$models_dir" ] && echo "  $(du -sh "$models_dir" 2>/dev/null | cut -f1)	AI models ($models_dir)"
+  echo "  $(free_gb /System/Volumes/Data) GB free on the internal drive"
+  check_free_space "$STORAGE_PATH" >/dev/null 2>&1 || warn "Storage drive is below ${MIN_FREE_GB} GB free"
+  echo
+  echo "${C_BLD}Background jobs${C_OFF}"
+  for j in ollama updater diskinfo; do
+    if launchctl print "gui/$(id -u)/$AGENT_PREFIX.$j" >/dev/null 2>&1; then
+      echo "  $AGENT_PREFIX.$j  loaded"
+    else
+      echo "  $AGENT_PREFIX.$j  ${C_RED}not loaded${C_OFF}"
+    fi
+  done
+}
+
+cmd_doctor() {
+  load_config
+  local bad=0 c img arch
+  [ "$(uname -m)" = "arm64" ] && ok "Apple Silicon" || { warn "Not Apple Silicon"; bad=1; }
+  docker_ready && ok "Docker running" || { warn "Docker not running"; bad=1; }
+  ollama_ready && ok "Ollama answering on $(ollama_url)" || { warn "Ollama not answering"; bad=1; }
+  nomad_ready && ok "NOMAD healthy" || { warn "NOMAD not healthy"; bad=1; }
+  if docker_ready; then
+    if docker exec nomad_admin curl -fsS -m 5 "http://host.docker.internal:${OLLAMA_BIND##*:}/api/version" >/dev/null 2>&1; then
+      ok "NOMAD container can reach Ollama"
+    else
+      warn "NOMAD container cannot reach Ollama at host.docker.internal:${OLLAMA_BIND##*:}"; bad=1
+    fi
+    for c in $(docker ps --filter name=nomad_ --format '{{.Names}}'); do
+      img="$(docker inspect -f '{{.Image}}' "$c")"
+      arch="$(docker image inspect -f '{{.Architecture}}' "$img" 2>/dev/null)"
+      if [ "$arch" = "arm64" ]; then ok "$c: arm64 (native)"; else warn "$c: $arch (runs under Rosetta emulation — slower)"; fi
+    done
+  fi
+  [ -f "$STORAGE_PATH/.nomac-storage" ] && ok "Storage present at $STORAGE_PATH" || { warn "Storage folder missing: $STORAGE_PATH"; bad=1; }
+  check_free_space "$STORAGE_PATH" && ok "Free space OK" || bad=1
+  return $bad
+}
+
+cmd_logs() {
+  load_config
+  case "${1:-admin}" in
+    ollama|updater|diskinfo) tail -n 200 -f "$NOMAC_LOGS/$1.log" ;;
+    update) cat "$NOMAC_HOME/update-shared/update-log" ;;
+    *) docker logs -f --tail 200 "nomad_${1:-admin}" ;;
+  esac
+}
+
+cmd_models() {
+  load_config
+  case "${1:-list}" in
+    list) ollama list ;;
+    pull) shift; [ $# -gt 0 ] || die "usage: nomac models pull <name>"; for m in "$@"; do ollama pull "$m"; done ;;
+    rm)   shift; [ $# -gt 0 ] || die "usage: nomac models rm <name>"; for m in "$@"; do ollama rm "$m"; done ;;
+    *) die "usage: nomac models [list|pull <name>|rm <name>]" ;;
+  esac
+}
+
+cmd_maps() {
+  load_config
+  local zoom="$MAP_MAX_ZOOM" countries=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --zoom) zoom="$2"; shift 2 ;;
+      *) countries="$countries $(echo "$1" | tr '[:lower:]' '[:upper:]')"; shift ;;
+    esac
+  done
+  countries="${countries# }"
+  [ -n "$countries" ] || die "usage: nomac maps GB [IE ...] [--zoom 0-15]"
+  nomad_ready || die "NOMAD is not running."
+  request_maps "$countries" "$zoom" force
+}
+
+cmd_cleanup() {
+  load_config
+  prune_images
+  docker system df
+}
+
+cmd_help() {
+  cat <<EOF
+nomac — Project NOMAD for Apple Silicon Macs
+
+  install            Install or repair everything (safe to re-run)
+  start | stop [--all]
+  status             Versions, containers, loaded model, disk usage
+  doctor             Check everything is wired up correctly
+  update [--check|VERSION]
+                     Rebuild NOMAD at the latest (or given) upstream release.
+                     The Update button / auto-update in NOMAD's settings does
+                     the same thing automatically.
+  rollback           Go back to the previously installed NOMAD version
+  models [list|pull NAME|rm NAME]
+  maps CC [CC ...] [--zoom N]
+                     Download a country map extract (e.g. nomac maps GB)
+  content [--dry-run] [--force]
+                     Download the library and apps set in nomac.conf
+                     (PROFILE, WIKIPEDIA, LIBRARY, APPS), after a space check
+  drill              Readiness check: library opens, AI answers, maps, apps,
+                     power-cut recovery. Run it with the internet unplugged.
+  power              Never sleep, restart after power cuts, start Docker at login
+  export-phone [DIR] [--max-gb N]
+                     Copy the essential references for the Kiwix phone app
+  logs [admin|kiwix|ollama|updater|update|...]
+  cleanup            Remove old images and build cache
+  uninstall
+
+Configuration: $NOMAC_REPO/nomac.conf   Data: $NOMAC_HOME
+EOF
+}
+
+main() {
+  local cmd="${1:-help}"; shift || true
+  case "$cmd" in
+    install)   cmd_install "$@" ;;
+    start)     cmd_start "$@" ;;
+    stop)      cmd_stop "$@" ;;
+    restart)   cmd_stop; cmd_start ;;
+    status)    cmd_status ;;
+    doctor)    cmd_doctor ;;
+    update)    cmd_update "$@" ;;
+    rollback)  load_config; cmd_rollback ;;
+    models)    cmd_models "$@" ;;
+    maps)      cmd_maps "$@" ;;
+    content)   cmd_content "$@" ;;
+    drill)     cmd_drill ;;
+    power)     cmd_power ;;
+    export-phone) cmd_export_phone "$@" ;;
+    logs)      cmd_logs "$@" ;;
+    cleanup)   cmd_cleanup ;;
+    uninstall) cmd_uninstall ;;
+    _handle-update-request) cmd_handle_update_request ;;
+    _disk-info) cmd_disk_info ;;
+    help|-h|--help) cmd_help ;;
+    *) cmd_help; exit 1 ;;
+  esac
+}
+
+main "$@"

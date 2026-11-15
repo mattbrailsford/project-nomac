@@ -1,0 +1,78 @@
+# nomac configuration. `nomac install` copies this to nomac.conf (git-ignored)
+# and asks about the main choices. Re-run `nomac install` after editing; it is
+# safe to run again and keeps your data, passwords and downloads.
+
+# ---------------------------------------------------------------- storage ---
+# Where offline content lives (Wikipedia/ZIM files, maps, Kolibri, notes, AI
+# knowledge-base uploads). Internal drive by default. For an external SSD use
+# its path under /Volumes, e.g. STORAGE_PATH="/Volumes/NomadSSD/nomad".
+# Format the SSD as APFS. Avoid spaces in the path.
+STORAGE_PATH="$HOME/ProjectNomad"
+
+# Warn when free space on the storage drive drops below this many GB.
+MIN_FREE_GB=30
+
+# ---------------------------------------------------------------- nomad -----
+# Upstream Project NOMAD release to build: "latest" or a version like "1.9.0".
+NOMAD_VERSION="latest"
+NOMAD_PORT=8080
+# Address you open NOMAD at. Use http://<your-mac-name>.local:8080 to reach it
+# from other devices on your network. Empty = http://localhost:$NOMAD_PORT
+NOMAD_URL=""
+
+# Container log viewer on port 9999 (true/false).
+DOZZLE=true
+DOZZLE_PORT=9999
+
+# Docker runtime to install if none is running: orbstack | colima
+DOCKER_RUNTIME="orbstack"
+
+# ------------------------------------------------------------------- AI -----
+# Ollama runs natively on the Mac (Metal GPU). The admin container reaches it at
+# host.docker.internal, so it listens on all interfaces by default. Set to
+# 127.0.0.1:11434 only if your Docker runtime forwards host.docker.internal to
+# the Mac's localhost (OrbStack does) and you don't want Ollama on your LAN.
+OLLAMA_BIND="0.0.0.0:11434"
+
+# Where models are stored. Empty = Ollama's default (~/.ollama/models, internal
+# drive — fastest to load).
+OLLAMA_MODELS_DIR=""
+
+# Unload an idle model after this long, freeing its memory.
+OLLAMA_KEEP_ALIVE="10m"
+
+# Models to download at install (space separated). 16 GB Mac: stay at <= 8B
+# parameters, 4-bit. More can be added or removed later in NOMAD's AI settings.
+# nomic-embed-text:v1.5 is always added — NOMAD's knowledge base needs it.
+MODELS="llama3.1:8b"
+
+# Upgrade Ollama with Homebrew when NOMAD applies a core update.
+AUTO_UPGRADE_OLLAMA=true
+
+# -------------------------------------------------------------- library -----
+# PROFILE="prepper" downloads an essentials library (~80 GB) and apps, using
+# NOMAD's own curated collections. Empty = choose everything in NOMAD's UI.
+# Sizes are checked against free space first: ./nomac content --dry-run
+PROFILE="prepper"
+
+# Override any part of the profile by uncommenting:
+#
+# Wikipedia edition: none | top-mini (0.3 GB) | top-nopic (2 GB) | all-mini (13 GB)
+#                    all-nopic (53 GB) | all-maxi (124 GB, use the SSD)
+#WIKIPEDIA="all-nopic"
+#
+# NOMAD collections as category:tier. Tiers are essential < standard <
+# comprehensive (each includes the one below). Categories: medicine, survival,
+# diy, agriculture, education, computing.
+#LIBRARY="medicine:comprehensive survival:standard diy:comprehensive agriculture:standard education:essential"
+#
+# Supply Depot apps to install (names as NOMAD uses them).
+#APPS="nomad_kiwix_server nomad_flatnotes nomad_meshtastic_web nomad_calibreweb nomad_vaultwarden nomad_homebox nomad_filebrowser"
+
+# ----------------------------------------------------------------- maps -----
+# Country map extracts to download at install, as ISO codes (GB = United
+# Kingdom, IE = Ireland, FR = France ...). Space separated; empty = none.
+# All listed countries are combined into one map file.
+MAP_COUNTRIES="GB"
+# 0–15. 15 = street level (largest). 13–14 is a good size/detail compromise.
+MAP_MAX_ZOOM=14
